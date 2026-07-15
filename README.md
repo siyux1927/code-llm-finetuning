@@ -252,6 +252,11 @@ This project explores the full pipeline from model fine-tuning to production dep
 
 (To be updated as each module completes)
 
+- [x] **M1: Data Preparation** — 164-problem HumanEval split into disjoint 50/50 train/eval sets (see `CLAUDE.md` for details, `data/scripts/prepare_data.py`)
+- [ ] M2: Baseline Testing
+- [ ] M3: LoRA Fine-tuning
+- [ ] M4: Fine-tuned Evaluation
+
 ---
 
 ## Blog Structure
