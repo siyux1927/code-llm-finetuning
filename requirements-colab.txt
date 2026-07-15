@@ -1,0 +1,9 @@
+# GPU-only dependencies for scripts that must run on Colab (or any CUDA
+# machine) rather than the local Mac dev environment — bitsandbytes 4-bit
+# quantization needs CUDA, it doesn't work on Mac/MPS.
+#
+# Usage on Colab: pip install -r requirements.txt -r requirements-colab.txt
+
+transformers
+accelerate
+bitsandbytes
