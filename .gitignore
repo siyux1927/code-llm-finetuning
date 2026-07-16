@@ -3,3 +3,8 @@ __pycache__/
 .pytest_cache/
 .venv/
 *.egg-info/
+
+# secrets / local credentials — never commit
+.env
+.env.*
+!.env.example

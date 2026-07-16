@@ -12,9 +12,9 @@ Working notes for continuing this project across machines with Claude Code. Desi
 
 ## Status
 
-- **M1 (Data Preparation): done.** `data/scripts/prepare_data.py` pulls the 164-problem `openai/openai_humaneval` dataset, shuffles with a fixed seed (42), and splits into two **disjoint** 50-problem sets:
-  - `data/processed/train_50.jsonl` — completion-style `{task_id, prompt, completion}`, for fine-tuning.
-  - `data/processed/eval_50.jsonl` — `{task_id, prompt, canonical_solution, test, entry_point}`, for M2/M4 pass@1 scoring (kept disjoint from train so fine-tuned improvement reflects generalization, not memorization — see GitHub issue for the reasoning).
+- **M1 (Data Preparation): done.** `data/scripts/prepare_data.py` pulls the 164-problem `openai/openai_humaneval` dataset, shuffles with a fixed seed (42), and splits into **disjoint** train / eval sets:
+  - `data/processed/train_50.jsonl` — 50 problems, completion-style `{task_id, prompt, completion}`, for fine-tuning.
+  - `data/processed/eval_114.jsonl` — 114 problems (all non-train), `{task_id, prompt, canonical_solution, test, entry_point}`, for M2/M4 pass@1 scoring. Sized to shrink pass@1 SE from ~4.8pp (N=50) to ~2.9pp (N=114) — see `docs/grilling_m1_m2.md` when it exists, or the GitHub issue.
 - **M2 (Baseline Testing): partially done.**
   - `eval/scoring.py` — pass@1 scoring harness (executes generated code against HumanEval tests, subprocess + timeout sandboxed). Reused unchanged by M4. Unit-tested locally (`eval/tests/test_scoring.py`, `pytest eval/tests/`), no GPU needed.
   - `eval/generate_baseline.py` — generates completions from the un-fine-tuned, **4-bit-quantized** Llama-2-7B (same quantization M3 will use, so M2→M4 improvement isn't conflated with a quantization change — see GitHub issue). **Not yet run** — needs a CUDA GPU (bitsandbytes doesn't work on Mac/MPS) and a Hugging Face token with the Llama 2 license accepted. Run on Colab: `pip install -r requirements.txt -r requirements-colab.txt`, then `huggingface-cli login`, then the script.

@@ -18,7 +18,7 @@ Usage (on Colab, after `huggingface-cli login` with a token that has
 accepted the Llama 2 license):
     pip install -r requirements-colab.txt
     python eval/generate_baseline.py \
-        --eval-set data/processed/eval_50.jsonl \
+        --eval-set data/processed/eval_114.jsonl \
         --output data/processed/baseline_generations.jsonl
 """
 
@@ -30,7 +30,7 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 MODEL_NAME = "meta-llama/Llama-2-7b-hf"
-MAX_NEW_TOKENS = 256
+MAX_NEW_TOKENS = 512
 
 # HumanEval completions should stop once the function body ends. Without a
 # stop rule the model keeps generating past the function (more examples,
@@ -80,7 +80,7 @@ def generate_completion(model, tokenizer, prompt: str) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--eval-set", type=Path, default=Path("data/processed/eval_50.jsonl"))
+    parser.add_argument("--eval-set", type=Path, default=Path("data/processed/eval_114.jsonl"))
     parser.add_argument("--output", type=Path, default=Path("data/processed/baseline_generations.jsonl"))
     args = parser.parse_args()
 

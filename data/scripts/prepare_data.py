@@ -17,7 +17,7 @@ from datasets import load_dataset
 
 SEED = 42
 TRAIN_SIZE = 50
-EVAL_SIZE = 50
+EVAL_SIZE = 114
 
 OUT_DIR = Path(__file__).resolve().parent.parent / "processed"
 
@@ -50,7 +50,7 @@ def main() -> None:
             }
             f.write(json.dumps(record) + "\n")
 
-    eval_path = OUT_DIR / "eval_50.jsonl"
+    eval_path = OUT_DIR / "eval_114.jsonl"
     with eval_path.open("w") as f:
         for ex in eval_examples:
             record = {

@@ -3,7 +3,7 @@ from pathlib import Path
 
 from eval import scoring
 
-EVAL_SET_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "processed" / "eval_50.jsonl"
+EVAL_SET_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "processed" / "eval_114.jsonl"
 
 
 def _load_eval_records_with_canonical_completions():
