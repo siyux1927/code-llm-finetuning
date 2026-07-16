@@ -4,9 +4,11 @@ Working notes for continuing this project across machines with Claude Code. Desi
 
 ## Environment
 
-- Python runs **only** inside the `myenv` micromamba env: `micromamba run -n myenv <cmd>`.
-- Deps are tracked in `requirements.txt` (`micromamba run -n myenv pip install -r requirements.txt`).
-- Local dev machine is a Mac (Apple Silicon, no CUDA) — only CPU-bound work (data prep, small scripts) runs locally. GPU work (baseline inference, LoRA/QLoRA training, eval generation) needs Colab, per README's VRAM-budget decisions.
+- Python runs **only** inside the `myenv` env. Invocation depends on the machine:
+  - **Windows PC** (branch `dev/t`): `conda run -n myenv <cmd>`
+  - **Mac** (branch `dev/mbp`): `micromamba run -n myenv <cmd>`
+- Deps are tracked in `requirements.txt` (install with the machine's respective `<manager> run -n myenv pip install -r requirements.txt`).
+- Neither machine has CUDA — only CPU-bound work (data prep, small scripts, JSON/notebook validation, unit tests) runs locally. GPU work (baseline inference, LoRA/QLoRA training, eval generation) needs Colab, per README's VRAM-budget decisions.
 
 ## Status
 
