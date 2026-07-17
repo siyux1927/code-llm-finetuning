@@ -8,3 +8,6 @@ __pycache__/
 .env
 .env.*
 !.env.example
+
+# M3 training intermediate output (checkpoints, logs) — final adapter goes to models/lora_adapter/ and IS committed
+train/output/
