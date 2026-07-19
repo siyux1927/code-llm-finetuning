@@ -46,14 +46,28 @@ def load_calibration_texts(train_path: Path) -> list[str]:
     return [r["prompt"] + r["completion"] for r in records]
 
 
+def _patch_peft_gptqmodel_awq_compat() -> None:
+    """peft's LoRA-merge dispatch unconditionally imports
+    `gptqmodel.nn_modules.qlinear.gemm_awq.AwqGEMMQuantLinear` while probing
+    for an AWQ target module match — even though this is a plain fp16 merge
+    that never touches AWQ. Recent gptqmodel releases renamed that class to
+    `AwqGEMMLinear`, so the import crashes before peft even checks whether
+    AWQ applies. Alias the name so the import succeeds; no-op once a
+    peft/gptqmodel pairing agrees on the name again."""
+    import gptqmodel.nn_modules.qlinear.gemm_awq as _gemm_awq
+    if not hasattr(_gemm_awq, "AwqGEMMQuantLinear") and hasattr(_gemm_awq, "AwqGEMMLinear"):
+        _gemm_awq.AwqGEMMQuantLinear = _gemm_awq.AwqGEMMLinear
+
+
 def merge_adapter(adapter_path: Path, merged_dir: Path) -> None:
     """Load base (fp16, unquantized) + M3 adapter, merge, save to disk."""
     print(f"[m5] loading base model in fp16: {MODEL_NAME}")
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
     base = AutoModelForCausalLM.from_pretrained(
-        MODEL_NAME, torch_dtype=torch.float16, device_map="auto",
+        MODEL_NAME, dtype=torch.float16, device_map="auto",
     )
 
+    _patch_peft_gptqmodel_awq_compat()
     print(f"[m5] loading LoRA adapter from {adapter_path}")
     model = PeftModel.from_pretrained(base, str(adapter_path))
 
