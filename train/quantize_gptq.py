@@ -25,6 +25,7 @@ Runs on Colab T4 (CUDA required). Usage:
 """
 
 import argparse
+import gc
 import json
 from pathlib import Path
 
@@ -37,6 +38,12 @@ MODEL_NAME = "meta-llama/Llama-2-7b-hf"
 # GPTQ config — see docs/grilling_m5_pre.md Q2/Q3
 GPTQ_BITS = 4
 GPTQ_GROUP_SIZE = 128
+
+# save_pretrained's default 5GB shard size can need system RAM close to the
+# whole model's size while gathering/writing a shard — Colab's free-tier T4
+# only has ~12.7GB system RAM, smaller than this 13.5GB fp16 model. A much
+# smaller shard bounds that peak. See issue #6.
+SAVE_MAX_SHARD_SIZE = "1GB"
 
 
 def load_calibration_texts(train_path: Path) -> list[str]:
@@ -73,9 +80,14 @@ def merge_adapter(adapter_path: Path, merged_dir: Path) -> None:
 
     print("[m5] merging adapter into base")
     model = model.merge_and_unload()
+    del base  # same underlying object as `model` post-merge; drop the extra name
+    gc.collect()
+    torch.cuda.empty_cache()
 
     merged_dir.mkdir(parents=True, exist_ok=True)
-    model.save_pretrained(str(merged_dir))
+    print(f"[m5] saving merged fp16 model to {merged_dir} "
+          f"(max_shard_size={SAVE_MAX_SHARD_SIZE} to keep peak system RAM down — see issue #6)")
+    model.save_pretrained(str(merged_dir), max_shard_size=SAVE_MAX_SHARD_SIZE)
     tokenizer.save_pretrained(str(merged_dir))
     print(f"[m5] merged fp16 model saved to {merged_dir}")
 
