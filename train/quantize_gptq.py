@@ -71,7 +71,7 @@ def merge_adapter(adapter_path: Path, merged_dir: Path) -> None:
     print(f"[m5] loading base model in fp16: {MODEL_NAME}")
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
     base = AutoModelForCausalLM.from_pretrained(
-        MODEL_NAME, dtype=torch.float16, device_map="auto",
+        MODEL_NAME, dtype=torch.float16, device_map={"": 0},
     )
 
     _patch_peft_gptqmodel_awq_compat()
@@ -105,10 +105,15 @@ def quantize(merged_dir: Path, calib_texts: list[str], output_dir: Path) -> None
     )
     print(f"[m5] running GPTQ {GPTQ_BITS}-bit quantization "
           f"(calibration: {len(calib_texts)} examples)")
+    # Explicit single-GPU placement, not "auto" — accelerate's auto device_map
+    # can decide to offload part of the model to disk when it estimates extra
+    # headroom is needed for quantization, and GPTQ has no support for
+    # disk-offloaded parameters. See issue #8. The merge step already proves
+    # this 13.5GB model fits on a 15GB T4 GPU on its own.
     model = AutoModelForCausalLM.from_pretrained(
         str(merged_dir),
         quantization_config=gptq_config,
-        device_map="auto",
+        device_map={"": 0},
     )
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -126,17 +131,29 @@ def main() -> None:
                         help="fp16 merge output. Not committed to git (GB-scale).")
     parser.add_argument("--output-dir", type=Path, default=Path("models/gptq_4bit"),
                         help="GPTQ checkpoint output. Not committed to git (GB-scale).")
+    parser.add_argument("--skip-merge", action="store_true",
+                        help="Skip merge_adapter() and reuse an existing --merged-dir — "
+                             "e.g. to retry quantize() alone after it failed without "
+                             "re-running the slow merge+save step.")
     args = parser.parse_args()
 
-    # Defensive check — same pattern as grilling_m4_pre.md Q8
-    if not (args.adapter / "adapter_config.json").exists():
-        raise SystemExit(
-            f"[m5] Adapter not found at {args.adapter} "
-            f"(no adapter_config.json inside). "
-            f"Did M3 training finish and models/lora_adapter/ get pulled?"
-        )
+    if args.skip_merge:
+        if not (args.merged_dir / "config.json").exists():
+            raise SystemExit(
+                f"[m5] --skip-merge given but no model found at {args.merged_dir} "
+                f"(no config.json inside). Run without --skip-merge first."
+            )
+        print(f"[m5] --skip-merge: reusing existing merge at {args.merged_dir}")
+    else:
+        # Defensive check — same pattern as grilling_m4_pre.md Q8
+        if not (args.adapter / "adapter_config.json").exists():
+            raise SystemExit(
+                f"[m5] Adapter not found at {args.adapter} "
+                f"(no adapter_config.json inside). "
+                f"Did M3 training finish and models/lora_adapter/ get pulled?"
+            )
+        merge_adapter(args.adapter, args.merged_dir)
 
-    merge_adapter(args.adapter, args.merged_dir)
     calib_texts = load_calibration_texts(args.train_set)
     quantize(args.merged_dir, calib_texts, args.output_dir)
 
