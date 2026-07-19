@@ -84,8 +84,14 @@ def generate_completion(model, tokenizer, prompt: str) -> str:
             do_sample=False,  # greedy: deterministic, standard for pass@1
             pad_token_id=tokenizer.eos_token_id,
         )
-    generated_ids = output_ids[0][inputs["input_ids"].shape[1] :]
-    raw_completion = tokenizer.decode(generated_ids, skip_special_tokens=True)
+    # Decode the full sequence (prompt + completion) together and slice the
+    # resulting string, rather than slicing token ids and decoding just the
+    # suffix. Llama's SentencePiece tokenizer drops the leading space of a
+    # decode() call's first token when there's no preceding context, which
+    # silently corrupts the first line's indentation if you decode only the
+    # newly generated ids.
+    full_text = tokenizer.decode(output_ids[0], skip_special_tokens=True)
+    raw_completion = full_text[len(prompt):]
     return truncate_at_stop_sequence(raw_completion)
 
 
