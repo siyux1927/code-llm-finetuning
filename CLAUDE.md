@@ -31,11 +31,17 @@ Working notes for continuing this project across machines with Claude Code. Desi
 - **M5 (Model Quantization): code ready, not yet run.**
   - `train/quantize_gptq.py` — loads base (fp16, unquantized) + `models/lora_adapter`, `merge_and_unload()`s into a standalone model, saves to `models/merged_fp16/`, then runs GPTQ 4-bit quantization (`transformers.GPTQConfig`, group_size=128, calibrated on `train_50.jsonl`) into `models/gptq_4bit/`. Neither output dir is committed (GB-scale, gitignored) — only `models/lora_adapter/` (M3's adapter) is.
   - `eval/generate_quantized.py` — same role as `generate_completions.py` but for a plain local model directory (fp16 merge or GPTQ checkpoint); imports `generate_completion` from `generate_completions.py` so decoding params (greedy/512/STOP_SEQUENCES) stay identical across M2/M4/M5.
-  - `notebooks/run_quantization_colab.ipynb` — Colab launcher: merge → quantize → generate ×2 (fp16 merged, GPTQ-4bit) → score ×2 → size/pass@1 summary table → pushes only the two small `quant_*_generations.jsonl` back to git.
+  - `notebooks/run_quantization_colab.ipynb` — Colab launcher, now covering **both M5 and M6** (see below) in one session: merge → quantize → generate ×2 (fp16 merged, GPTQ-4bit) → score ×2 → size/pass@1 summary table → pushes only the small `quant_*_generations.jsonl` back to git.
   - Only quantizes the **M3 fine-tuned model** (not base), only **4-bit** (8-bit variant dropped — see `README.md` Decision 7), calibration reuses `train_50.jsonl`. Full rationale in `docs/grilling_m5_pre.md`.
   - **Note for later**: the "fp16 merged" pass@1 from this run is a different number from M4's 16.67% — M4 ran 4-bit-quantized base + LoRA adapter overlay, M5's fp16 point is the merged model at full precision. Not a contradiction if both show up in the blog; see `grilling_m5_pre.md` Q5.
-  - Still to do: run on Colab (needs `optimum` + `gptqmodel`, added to `requirements-colab.txt`), fill in the pass@1/size numbers, decide the M5→M6 path based on how much quality GPTQ-4bit costs.
-- **Next up after M5**: M6 (vLLM inference on the GPTQ-4bit checkpoint) / M7 (cost) — see `README.md`.
+  - Still to do: run on Colab (needs `optimum` + `gptqmodel`, added to `requirements-colab.txt`), fill in the pass@1/size numbers.
+- **M6 (Inference Optimization / vLLM): code ready, not yet run.**
+  - `eval/generate_vllm.py` — loads `models/gptq_4bit` via vLLM, times a single-request call and a batch-114 call, writes `data/processed/quant_gptq4bit_vllm_generations.jsonl`. Imports `STOP_SEQUENCES`/`MAX_NEW_TOKENS` from `generate_completions.py` so decoding stays identical to the HF-side comparison.
+  - Compares **vLLM vs plain HF `generate()` only** — both on the same M5 GPTQ-4bit checkpoint. Does not re-test fp16 (that quality/size tradeoff is M5's question, not M6's).
+  - Same notebook as M5 (`run_quantization_colab.ipynb`) — merged deliberately because M5's GPTQ checkpoint is GB-scale and not committed, so a separate M6 notebook would start with an empty disk and have to redo the quantization just to get it back. Full rationale in `docs/grilling_m6_pre.md`.
+  - Notebook has explicit smoke-test cells (Step 3.5) before the expensive 7B steps — tiny-model GPTQ quantization dry run, tiny-model vLLM dry run, free-VRAM check — so library/driver/VRAM problems surface in seconds instead of after a 20-minute run. `requirements-colab.txt` now includes `vllm`.
+  - Still to do: run on Colab, confirm vLLM's pass@1 matches M5's GPTQ-4bit number, fill in the three timing numbers (HF total / vLLM single-request / vLLM batch-114).
+- **Next up after M5/M6**: M7 (cost analysis, using M6's throughput numbers) — see `README.md`.
 
 ## Working conventions
 

@@ -15,3 +15,6 @@ peft
 # docs/grilling_m5_pre.md Q2.
 optimum
 gptqmodel
+
+# M6: vLLM serving benchmark (eval/generate_vllm.py) — see docs/grilling_m6_pre.md
+vllm
