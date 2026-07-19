@@ -173,18 +173,18 @@ This project explores the full pipeline from model fine-tuning to production dep
 **Problem**: How to bridge from fine-tuning to production optimization?
 
 **Options**:
-- A. Direct 4-bit quantization (aggressive compression)
-- B. Progressive quantization (8-bit first, then 4-bit)
+- A. Direct 4-bit quantization only (single compression point)
+- B. Progressive quantization (8-bit first, then 4-bit) — shows a quality/size curve
 - C. Compare multiple methods (GPTQ vs AWQ vs bitsandbytes)
 
-**Choice**: A (GPTQ with 8-bit + 4-bit variants)
-- Phase 2 Extension: AWQ and bitsandbytes can be added later
+**Choice**: A (GPTQ, 4-bit only)
+- Phase 2 Extension: 8-bit variant, AWQ, and bitsandbytes-for-inference can be added later if the tradeoff curve becomes interesting to flesh out
 
 **Reasoning**:
-- GPTQ is most mature and widely used in production
-- 8-bit + 4-bit comparison shows the quality/size tradeoff curve
-- Clean story: "Here's how quantization affects code quality"
-- Realistic scope for M5 (3-5 days)
+- GPTQ is most mature and widely used in production, and (unlike bitsandbytes, which M3's QLoRA already used as a *training-time* trick) produces a standalone deployable checkpoint with inference kernels vLLM (M6) natively supports well
+- Quantizes the **M3 fine-tuned model only** (base + LoRA adapter merged via `merge_and_unload()`), not the base model — M5 is about deploying the M4 result, not re-deriving the M2 story
+- Dropped the 8-bit variant originally planned here: it doubles the Colab run (quantize + generate + score again) and the risk surface (one more shot at hitting a `gptqmodel` version/VRAM issue) for a data point that mainly adds resolution to the quality/size curve, not a different conclusion. One point (fp16 merged vs. GPTQ-4bit) is enough to tell the MVP story: "compressed to size X, cost Y pp of pass@1." Revisit 8-bit in Phase 2 if that finer curve turns out to matter.
+- Realistic scope for M5
 
 ---
 
