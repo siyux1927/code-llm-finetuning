@@ -12,3 +12,8 @@ __pycache__/
 
 # M3 training intermediate output (checkpoints, logs) — final adapter goes to models/lora_adapter/ and IS committed
 train/output/
+
+# M5 quantization artifacts (GB-scale, regenerable via train/quantize_gptq.py) —
+# only models/lora_adapter/ (M3's small LoRA adapter) is committed
+models/merged_fp16/
+models/gptq_4bit/

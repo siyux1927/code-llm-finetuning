@@ -28,7 +28,14 @@ Working notes for continuing this project across machines with Claude Code. Desi
   - `eval/compare_results.py`: **delta +7.02pp, 95% CI half-width ±8.73pp → not significant at 95%.** Flipped: 10 fail→pass, 2 pass→fail (regressions).
   - Decision (made 2026-07-19, not revisited): don't chase the seed-bias diagnostic listed in `docs/grilling_m1_m2.md`/`grilling_m4_pre.md` — write up the result as-is, consistent with the project's own framing of this as a fine-tuning-mechanism demo rather than a SOTA attempt. See `docs/baseline_behavior.md` for the full disclosure language.
 - **Blog Part 2** = M4 outputs; see `docs/baseline_behavior.md` for the pre-drafted narrative (now filled in with final numbers).
-- **Next up**: Phase 2 (M5 quantization / M6 inference / M7 cost) — see `README.md`.
+- **M5 (Model Quantization): code ready, not yet run.**
+  - `train/quantize_gptq.py` — loads base (fp16, unquantized) + `models/lora_adapter`, `merge_and_unload()`s into a standalone model, saves to `models/merged_fp16/`, then runs GPTQ 4-bit quantization (`transformers.GPTQConfig`, group_size=128, calibrated on `train_50.jsonl`) into `models/gptq_4bit/`. Neither output dir is committed (GB-scale, gitignored) — only `models/lora_adapter/` (M3's adapter) is.
+  - `eval/generate_quantized.py` — same role as `generate_completions.py` but for a plain local model directory (fp16 merge or GPTQ checkpoint); imports `generate_completion` from `generate_completions.py` so decoding params (greedy/512/STOP_SEQUENCES) stay identical across M2/M4/M5.
+  - `notebooks/run_quantization_colab.ipynb` — Colab launcher: merge → quantize → generate ×2 (fp16 merged, GPTQ-4bit) → score ×2 → size/pass@1 summary table → pushes only the two small `quant_*_generations.jsonl` back to git.
+  - Only quantizes the **M3 fine-tuned model** (not base), only **4-bit** (8-bit variant dropped — see `README.md` Decision 7), calibration reuses `train_50.jsonl`. Full rationale in `docs/grilling_m5_pre.md`.
+  - **Note for later**: the "fp16 merged" pass@1 from this run is a different number from M4's 16.67% — M4 ran 4-bit-quantized base + LoRA adapter overlay, M5's fp16 point is the merged model at full precision. Not a contradiction if both show up in the blog; see `grilling_m5_pre.md` Q5.
+  - Still to do: run on Colab (needs `optimum` + `gptqmodel`, added to `requirements-colab.txt`), fill in the pass@1/size numbers, decide the M5→M6 path based on how much quality GPTQ-4bit costs.
+- **Next up after M5**: M6 (vLLM inference on the GPTQ-4bit checkpoint) / M7 (cost) — see `README.md`.
 
 ## Working conventions
 

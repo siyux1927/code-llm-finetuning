@@ -8,3 +8,10 @@ transformers
 accelerate
 bitsandbytes
 peft
+
+# M5: GPTQ post-training quantization (train/quantize_gptq.py) — optimum
+# wraps the calibration/quantization flow, gptqmodel is the maintained
+# kernel backend (replaces the now-stale auto-gptq). See
+# docs/grilling_m5_pre.md Q2.
+optimum
+gptqmodel
