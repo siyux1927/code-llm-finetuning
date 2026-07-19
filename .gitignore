@@ -3,6 +3,7 @@ __pycache__/
 .pytest_cache/
 .venv/
 *.egg-info/
+.DS_Store
 
 # secrets / local credentials — never commit
 .env

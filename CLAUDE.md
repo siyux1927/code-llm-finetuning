@@ -14,22 +14,21 @@ Working notes for continuing this project across machines with Claude Code. Desi
 
 - **M1 (Data Preparation): done.** `data/scripts/prepare_data.py` pulls the 164-problem `openai/openai_humaneval` dataset, shuffles with a fixed seed (42), and splits into **disjoint** train / eval sets:
   - `data/processed/train_50.jsonl` — 50 problems, completion-style `{task_id, prompt, completion}`, for fine-tuning.
-  - `data/processed/eval_114.jsonl` — 114 problems (all non-train), `{task_id, prompt, canonical_solution, test, entry_point}`, for M2/M4 pass@1 scoring. Sized to shrink pass@1 SE from ~4.8pp (N=50) to ~2.9pp (N=114) — see `docs/grilling_m1_m2.md` when it exists, or the GitHub issue.
-- **M2 (Baseline Testing): partially done.**
-  - `eval/scoring.py` — pass@1 scoring harness (executes generated code against HumanEval tests, subprocess + timeout sandboxed). Reused unchanged by M4. Unit-tested locally (`eval/tests/test_scoring.py`, `pytest eval/tests/`), no GPU needed.
-  - `eval/generate_completions.py` — generates completions from Llama-2-7B (4-bit-quantized). No `--adapter` = M2 baseline; `--adapter models/lora_adapter/` = M4 fine-tuned. Same quantization M3 uses, so M2→M4 improvement isn't conflated with a quantization change. **Not yet run** — needs a CUDA GPU (bitsandbytes doesn't work on Mac/MPS) and a Hugging Face token with the Llama 2 license accepted. Run on Colab: `pip install -r requirements.txt -r requirements-colab.txt`, then `huggingface-cli login`, then the script.
-  - Still to do: actually run generation on Colab (via `notebooks/run_baseline_colab.ipynb`), which now also computes pass@1 in-place via the new `eval/score.py` CLI.
-- **M3 (LoRA Fine-tuning): code ready, not yet run.**
-  - `train/train_lora.py` — QLoRA training script (r=16, α=32, dropout=0.05, all-linear target modules; 5 epochs, LR 2e-4, cosine, paged_adamw_8bit). Completion-only loss masking, ~62 update steps total. Saves adapter to `models/lora_adapter/` (committed to git), Trainer intermediate outputs to `train/output/` (gitignored). See `docs/grilling_m3_pre.md` for the full decision matrix.
-  - `notebooks/run_train_lora_colab.ipynb` — Colab launcher, same pattern as M2's notebook.
-  - Still to do: run on Colab (needs the same HF/Llama-2 access as M2), commit the adapter back, then M4.
-- **M4 (Fine-tuned Evaluation): code ready, not yet run.**
-  - Reuses `eval/generate_completions.py` with `--adapter models/lora_adapter` to load base + LoRA overlay. Same 4-bit + greedy + 512 tokens + STOP_SEQUENCES as M2 for clean attribution.
-  - `eval/score.py` — CLI wrapper for `eval/scoring.py`; reports pass@1 with 95% CI half-width.
-  - `eval/compare_results.py` — takes baseline + fine-tuned generations, prints delta, significance test, flipped problems, side-by-side samples for blog material.
-  - `notebooks/run_finetuned_colab.ipynb` — Colab launcher; runs generation → pass@1 → compare in one flow.
-  - See `docs/grilling_m4_pre.md` for the decision matrix.
-- **Blog Part 2** = M4 outputs; see `docs/baseline_behavior.md` for the pre-drafted narrative.
+  - `data/processed/eval_114.jsonl` — 114 problems (all non-train), `{task_id, prompt, canonical_solution, test, entry_point}`, for M2/M4 pass@1 scoring. Sized to shrink pass@1 SE from ~4.8pp (N=50) to ~2.9pp (N=114) — see `docs/grilling_m1_m2.md`.
+- **M2 (Baseline Testing): done.** Ran on Colab via `notebooks/run_baseline_colab.ipynb` (M2/M3/M4 all consolidated into this one notebook — do not modify it, it's the executed record).
+  - `eval/scoring.py` — pass@1 scoring harness. Unit-tested locally (`eval/tests/test_scoring.py`).
+  - `eval/generate_completions.py` — generated `data/processed/baseline_generations.jsonl` (114 completions, 4-bit Llama-2-7B, no adapter).
+  - **Result: pass@1 = 9.65% (11/114), 95% CI ±5.42pp.**
+- **M3 (LoRA Fine-tuning): done.**
+  - `train/train_lora.py` — QLoRA (r=16, α=32, dropout=0.05, all-linear, 5 epochs, LR 2e-4 cosine, paged_adamw_8bit) on the 50-example train set. Train loss converged 0.5 → ~0.02-0.17 (healthy, no collapse-to-zero overfit signal).
+  - Adapter downloaded from Colab as `lora_adapter.zip`, then **converted from fp32 → fp16 locally** (post-hoc dtype cast, no retraining) because the fp32 `adapter_model.safetensors` was 152.6 MB — over GitHub's 100 MB single-file limit, and bigger than the `docs/grilling_m3_pre.md` Q7 estimate of ~40-80 MB. fp16 cast brought it to 76.3 MB (verified: same 448 tensors, same shapes, max abs diff ~3.8e-6 — negligible, doesn't affect M2/M4 comparability since inference compute dtype is fp16 either way per `BitsAndBytesConfig`). Committed at `models/lora_adapter/` (~80 MB total with tokenizer files).
+- **M4 (Fine-tuned Evaluation): done.**
+  - `eval/generate_completions.py --adapter models/lora_adapter` → `data/processed/finetuned_generations.jsonl`.
+  - **Result: pass@1 = 16.67% (19/114), 95% CI ±6.84pp.**
+  - `eval/compare_results.py`: **delta +7.02pp, 95% CI half-width ±8.73pp → not significant at 95%.** Flipped: 10 fail→pass, 2 pass→fail (regressions).
+  - Decision (made 2026-07-19, not revisited): don't chase the seed-bias diagnostic listed in `docs/grilling_m1_m2.md`/`grilling_m4_pre.md` — write up the result as-is, consistent with the project's own framing of this as a fine-tuning-mechanism demo rather than a SOTA attempt. See `docs/baseline_behavior.md` for the full disclosure language.
+- **Blog Part 2** = M4 outputs; see `docs/baseline_behavior.md` for the pre-drafted narrative (now filled in with final numbers).
+- **Next up**: Phase 2 (M5 quantization / M6 inference / M7 cost) — see `README.md`.
 
 ## Working conventions
 
