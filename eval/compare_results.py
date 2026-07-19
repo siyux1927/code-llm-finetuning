@@ -17,8 +17,8 @@ import json
 import math
 from pathlib import Path
 
-from eval.scoring import score_completions
-from eval.score import load_eval_set, join_generations_with_eval
+from scoring import score_completions
+from score import load_eval_set, join_generations_with_eval
 
 
 def score_one(gen_path: Path, eval_records: dict):

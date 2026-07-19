@@ -18,7 +18,7 @@ import json
 import math
 from pathlib import Path
 
-from eval.scoring import score_completions
+from scoring import score_completions
 
 
 def load_eval_set(eval_set_path: Path) -> dict:
