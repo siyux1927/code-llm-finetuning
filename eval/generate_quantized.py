@@ -28,6 +28,7 @@ import argparse
 import json
 from pathlib import Path
 
+import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from generate_completions import generate_completion
@@ -35,7 +36,15 @@ from generate_completions import generate_completion
 
 def load_model_and_tokenizer(model_path: Path):
     tokenizer = AutoTokenizer.from_pretrained(str(model_path))
-    model = AutoModelForCausalLM.from_pretrained(str(model_path), device_map="auto")
+    # dtype=fp16 must be explicit: without it, from_pretrained upcasts the
+    # fp16 merged checkpoint to fp32 (Llama-2-7B: 13.5GB → 27GB), which OOMs
+    # the T4. The GPTQ checkpoint is unaffected (4-bit is config-locked), but
+    # this same call loads the fp16 merge too. device_map={"": 0} pins to the
+    # single GPU rather than letting accelerate's "auto" silently offload
+    # layers to CPU/disk — same failure class as issue #8's quantize step.
+    model = AutoModelForCausalLM.from_pretrained(
+        str(model_path), dtype=torch.float16, device_map={"": 0},
+    )
     model.eval()
     return model, tokenizer
 
