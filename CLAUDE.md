@@ -47,5 +47,5 @@ Working notes for continuing this project across machines with Claude Code. Desi
 
 - Interesting problems, ambiguities, or design forks hit during implementation get filed as GitHub issues on this repo (not a formal spec process — just a running log of "things worth remembering"). Issues are written in Chinese.
 - Git commit messages are written in Chinese, and do not include a `Co-Authored-By` trailer.
-- Prose docs under `docs/` and top-level notes (TODO.md, etc.) are written in Chinese. `README.md` and `CLAUDE.md` themselves stay bilingual — English scaffolding, Chinese when it reads more naturally.
+- Prose docs under `docs/` and top-level notes (TODO.md, etc.) are written in Chinese. `README.md` is written in Chinese (研究 + 开发者语气, de-careerized — no job/interview framing). `CLAUDE.md` itself stays bilingual — English scaffolding, Chinese when it reads more naturally.
 - No formal spec/ticket pipeline in use for this project — it's a learn-by-building project, developed interactively and incrementally.

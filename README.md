@@ -1,276 +1,280 @@
-# Code Generation Fine-tuning on LLMs
+# 面向代码生成的大模型微调与生产化优化
 
-A comprehensive study on fine-tuning Llama 2-7B for code generation using LoRA and QLoRA techniques, with production optimization strategies including quantization, inference acceleration, and cost analysis.
+一个在免费 / 消费级 GPU 约束下，围绕 Llama 2-7B 代码生成任务展开的小型项目：使用 LoRA / QLoRA 进行微调，并配合量化、推理加速与成本分析等生产化优化手段。
 
-## Project Overview
+## 项目概述
 
-This project explores the full pipeline from model fine-tuning to production deployment, targeting the **LLMOps** engineering role at large companies. The goal is to understand:
-1. How to fine-tune models for specific tasks (code generation)
-2. How to optimize for production constraints (VRAM, latency, cost)
-3. How to measure and communicate improvements
+本项目探索从模型微调到生产部署的完整流程，围绕以下核心问题展开：
 
-### Target Model
-- **Base Model**: Llama 2-7B
-- **Task**: Code generation (HumanEval)
-- **Fine-tuning Method**: QLoRA (4-bit quantized LoRA)
+1. **RQ1**：LoRA / QLoRA 微调能在多大程度上提升通用小模型（Llama 2-7B）在 HumanEval 上的 pass@1？
+2. **RQ2**：训练后量化（GPTQ 4-bit）在多大的体积压缩下，带来多少质量损失？
+3. **RQ3**：vLLM 相对朴素 HF 推理的时延 / 吞吐增益如何，自托管与调用 API 之间的成本如何权衡？
 
----
+### 目标设定
 
-## Project Phases
-
-### Phase 1: MVP (Quick Validation)
-- **M1**: Data Preparation
-- **M2**: Baseline Testing
-- **M3**: LoRA Fine-tuning
-- **M4**: Fine-tuned Evaluation
-
-### Phase 2: Iteration (Production Optimization)
-- **M5**: Model Quantization
-- **M6**: Inference Optimization (vLLM)
-- **M7**: Cost Analysis
+- **基座模型**：Llama 2-7B
+- **任务**：代码生成（HumanEval）
+- **微调方法**：QLoRA（4-bit 量化 LoRA）
 
 ---
 
-## Design Decisions
+## 项目阶段
 
-### **Decision 1: Why HumanEval + Code Generation?**
+### 阶段一：MVP（快速验证）
+- **M1**：数据准备
+- **M2**：基线测试
+- **M3**：LoRA 微调
+- **M4**：微调后评估
 
-**Problem**: Need a task that is:
-- Practically valuable (not toy problems)
-- Objectively measurable (not fuzzy)
-- Suitable for LLMOps interviews
-
-**Options**:
-- A. Text classification (too simple)
-- B. Instruction-following (hard to quantify results)
-- C. RAG system with retrieval-augmented generation (complex, production-relevant)
-
-**Choice**: C (RAG system) → then scoped down to **Code Generation** for faster MVP
-
-**Reasoning**:
-- HumanEval is the **standard benchmark** in industry (all interviewers recognize it)
-- Pass@1 metric is objective (code either passes tests or doesn't)
-- Easy to show "improvement": "Model went from X% to Y% pass rate"
-- Directly relevant to LLMOps: most companies optimize code-related models
+### 阶段二：迭代（生产化优化）
+- **M5**：模型量化
+- **M6**：推理优化（vLLM）
+- **M7**：成本分析
 
 ---
 
-### **Decision 2: Llama 2-7B vs CodeLlama vs Others?**
+## 设计决策与权衡
 
-**Problem**: 7B model size offers good balance, but which variant?
+### **决策 1：为什么选择 HumanEval + 代码生成？**
 
-**Options**:
-- A. CodeLlama-7B (already heavily optimized for code)
-- B. Llama 2-7B (general-purpose, weaker at code, more room for improvement)
-- C. Mistral-7B (efficient, but less community resources)
-- D. Qwen-7B (strong for Chinese, international CV less recognizable)
+**问题**：需要一个满足以下条件的任务：
+- 具备实际价值（而非玩具问题）
+- 可客观度量（而非模糊评价）
+- 适合作为"微调 → 生产化"的完整案例
 
-**Choice**: B (Llama 2-7B)
+**备选方案**：
+- A. 文本分类（过于简单）
+- B. 指令遵循（结果难以量化）
+- C. 检索增强生成 RAG（复杂，贴近生产）
 
-**Reasoning**:
-- **Clearest story**: "I improved a general-purpose model's code capability from ~25% to 50%+"
-- **More impactful**: Shows what fine-tuning can do, not just polish on already-strong model
-- **Best baseline**: Most community benchmarks and comparisons available
-- **Industry standard**: Widely used in production, LLMOps teams familiar with it
+**选择**：最初选 C（RAG），随后收窄为**代码生成**以加快 MVP。
 
----
-
-### **Decision 3: Data Volume for Fine-tuning?**
-
-**Problem**: HumanEval has 164 problems. How many to use?
-
-**Options**:
-- A. Full 164 problems (most complete, but VRAM/time intensive)
-- B. Sample 50 problems (balanced, manageable, credible)
-- C. Sample 20 problems (quick, but feels insufficient)
-
-**Choice**: B (50 problems)
-
-**Reasoning**:
-- Enough to demonstrate "meaningful improvement" from fine-tuning
-- Fits in Colab Free Tier VRAM budget
-- 50 samples is credible for research (not cherry-picked)
-- Reduces iteration time, more room for experimentation in Phase 2
+**依据**：
+- HumanEval 是业界的**标准基准**，认知度高
+- pass@1 指标客观（代码要么通过测试，要么不通过）
+- 改进易于量化表述："模型 pass@1 从 X% 提升到 Y%"
+- 与生产实践高度相关：代码类模型是多数团队的优化重点
 
 ---
 
-### **Decision 4: Completion vs Instruction-tuning?**
+### **决策 2：Llama 2-7B、CodeLlama 还是其他模型？**
 
-**Problem**: How should training data be structured?
+**问题**：7B 规模在效果与开销间较为均衡，但选哪个变体？
 
-**Options**:
-- A. **Completion**: `def func(args): ...` → complete the function body directly
-  - Simplest implementation, most direct task alignment
-  - Closest to actual HumanEval evaluation
-  
-- B. **Instruction-tuning**: `"Write a function that..." + signature` → function body
-  - More realistic LLMOps scenario (user gives instruction → model executes)
-  - Requires loss masking (only compute loss on output, not input)
-  - More complex preprocessing
+**备选方案**：
+- A. CodeLlama-7B（已针对代码大幅优化）
+- B. Llama 2-7B（通用模型，代码较弱，改进空间更大）
+- C. Mistral-7B（高效，但社区资源较少）
+- D. Qwen-7B（中文能力强）
 
-**Choice**: A (Completion)
+**选择**：B（Llama 2-7B）
 
-**Reasoning**:
-- MVP phase prioritizes speed + simplicity
-- Direct alignment with HumanEval's evaluation protocol
-- Easier to debug and verify correctness
-- Can revisit instruction-tuning in Phase 2 if needed
+**依据**：
+- 本项目关注"微调对通用模型代码能力的提升幅度"，因此需要一个代码能力**未被专门优化**的通用基座
+- CodeLlama 已针对代码大幅优化，提升空间小、难以体现微调效果；Llama 2-7B 留有充分改进余量
+- 社区基准与对照资源最完整，便于复现与比较
+- 在生产中应用广泛，作为基座较为通用
 
 ---
 
-### **Decision 5: LoRA vs QLoRA?**
+### **决策 3：微调使用多少数据？**
 
-**Problem**: Fine-tuning method affects VRAM constraints and optimization opportunities
+**问题**：HumanEval 共 164 题，微调用多少？
 
-**Options**:
-- A. **LoRA**: Standard approach, keeps base model in full precision (float16)
-  - More VRAM (potentially OOM on Colab Free)
-  - Simpler, more familiar
-  
-- B. **QLoRA**: Quantizes base model to 4-bit, then LoRA on top
-  - Significantly lower VRAM usage
-  - One-line library integration (`bitsandbytes`)
-  - Same quality, smaller footprint
-  - Already a production optimization technique
+**备选方案**：
+- A. 全部 164 题（最完整，但显存 / 时间开销大）
+- B. 抽样 50 题（均衡、可控、可信）
+- C. 抽样 20 题（快，但偏少）
 
-**Choice**: B (QLoRA)
+**选择**：B（50 题作训练集，其余 114 题作评估集，两集不相交）
 
-**Reasoning**:
-- **Practical**: Ensures stable training on Colab without VRAM surprises
-- **Low overhead**: `bitsandbytes` makes it a few lines of code
-- **Educational value**: Introduces quantization early, which connects to Phase 2 (M5)
-- **LLMOps alignment**: Resource-constrained optimization is core to the role
+**依据**：
+- 足以体现微调带来的可观测提升
+- 契合 Colab 免费档的显存预算
+- 50 例对小规模项目具备可信度（非精挑细选）
+- 缩短迭代时间，为阶段二留出实验空间
 
 ---
 
-### **Decision 6: Pass@1 vs Pass@k Evaluation?**
+### **决策 4：补全式还是指令微调？**
 
-**Problem**: How to measure improvement? Single attempt or multiple?
+**问题**：训练数据应如何组织？
 
-**Options**:
-- A. **Pass@1**: One generation attempt per problem
-  - Simpler, more conservative
-  - Official HumanEval metric
-  - Numbers look lower (e.g., 30% → 45%)
-  
-- B. **Pass@k**: Generate k solutions, take best
-  - More generous (looks better)
-  - Requires k× computation
-  - Better represents "true capability"
+**备选方案**：
+- A. **补全式**：`def func(args): ...` → 直接补全函数体
+  - 实现最简单，与任务对齐最直接
+  - 最贴近 HumanEval 实际评测形式
 
-**Choice**: A (Pass@1)
+- B. **指令微调**：`"写一个函数……" + 签名` → 函数体
+  - 更贴近真实使用场景（用户给指令 → 模型执行）
+  - 需要 loss masking（只对输出计算损失，不含输入）
+  - 预处理更复杂
 
-**Reasoning**:
-- **Fair comparison**: Matches official HumanEval protocol
-- **Clearest story**: Direct apples-to-apples improvement
-- **Simpler engineering**: No extra sampling logic
-- **Credibility**: No need to explain "why k=10 instead of k=5"
+**选择**：A（补全式）
 
----
-
-### **Decision 7: Quantization Method in M5?**
-
-**Problem**: How to bridge from fine-tuning to production optimization?
-
-**Options**:
-- A. Direct 4-bit quantization only (single compression point)
-- B. Progressive quantization (8-bit first, then 4-bit) — shows a quality/size curve
-- C. Compare multiple methods (GPTQ vs AWQ vs bitsandbytes)
-
-**Choice**: A (GPTQ, 4-bit only)
-- Phase 2 Extension: 8-bit variant, AWQ, and bitsandbytes-for-inference can be added later if the tradeoff curve becomes interesting to flesh out
-
-**Reasoning**:
-- GPTQ is most mature and widely used in production, and (unlike bitsandbytes, which M3's QLoRA already used as a *training-time* trick) produces a standalone deployable checkpoint with inference kernels vLLM (M6) natively supports well
-- Quantizes the **M3 fine-tuned model only** (base + LoRA adapter merged via `merge_and_unload()`), not the base model — M5 is about deploying the M4 result, not re-deriving the M2 story
-- Dropped the 8-bit variant originally planned here: it doubles the Colab run (quantize + generate + score again) and the risk surface (one more shot at hitting a `gptqmodel` version/VRAM issue) for a data point that mainly adds resolution to the quality/size curve, not a different conclusion. One point (fp16 merged vs. GPTQ-4bit) is enough to tell the MVP story: "compressed to size X, cost Y pp of pass@1." Revisit 8-bit in Phase 2 if that finer curve turns out to matter.
-- Realistic scope for M5
+**依据**：
+- MVP 阶段优先速度与简洁
+- 与 HumanEval 评测协议直接对齐
+- 更易调试与验证正确性
+- 如有需要，阶段二可再引入指令微调
 
 ---
 
-### **Decision 8: Inference Framework in M6?**
+### **决策 5：LoRA 还是 QLoRA？**
 
-**Problem**: How to deploy and accelerate the quantized models?
+**问题**：微调方法影响显存约束与优化空间。
 
-**Options**:
-- A. vLLM (industry standard, PagedAttention, mature ecosystem)
-- B. TensorRT-LLM (fastest, NVIDIA official, steeper learning curve)
-- C. Ollama (simplest, lightweight, less performant)
+**备选方案**：
+- A. **LoRA**：标准做法，基座保持全精度（float16）
+  - 显存更高（Colab 免费档可能 OOM）
+  - 更简单、更常见
 
-**Choice**: A (vLLM)
+- B. **QLoRA**：将基座量化为 4-bit，再在其上做 LoRA
+  - 显存显著降低
+  - 依赖 `bitsandbytes`，集成成本低
+  - 质量相当，占用更小
+  - 本身即一种生产化优化技术
 
-**Reasoning**:
-- Standard in large-scale LLMOps deployments
-- Natural progression from MVP inference
-- Excellent support for quantized models
-- Most directly relevant to job interview discussions
+**选择**：B（QLoRA）
 
----
-
-### **Decision 9: Cost Analysis Scope in M7?**
-
-**Problem**: What's the financial value of this approach?
-
-**Options**:
-- A. **Local inference vs API calls** (single request cost + annual TCO)
-- B. Different fine-tuning strategies cost (7B vs 3B vs no fine-tuning)
-- C. Full lifecycle TCO (development + ops + hardware)
-
-**Choice**: A (Local vs API cost modeling)
-
-**Reasoning**:
-- Most direct business case for LLMOps hiring managers
-- Easiest to understand and extend
-- Directly answers: "When is self-hosted cheaper than API?"
-- Scalable argument: single request cost × QPS × days = annual cost
+**依据**：
+- **稳定性**：确保在 Colab 上稳定训练，不因显存问题中断
+- **低开销**：`bitsandbytes` 使其只需数行代码
+- **衔接性**：提前引入量化，与阶段二（M5）自然衔接
+- **贴合主题**：资源受限下的优化是本项目关注点之一
 
 ---
 
-### **Decision 10: API Models for Cost Comparison?**
+### **决策 6：Pass@1 还是 Pass@k 评估？**
 
-**Problem**: Which LLM APIs to benchmark against?
+**问题**：如何度量改进——单次尝试还是多次？
 
-**Options**: (Selected for coverage across price tiers, regional focus, and availability)
+**备选方案**：
+- A. **Pass@1**：每题一次生成
+  - 更简单、更保守
+  - HumanEval 官方指标
 
-**Choice**: Comprehensive comparison table including:
-1. **Self-hosted baseline**: Llama 2-7B + vLLM (quantized)
-2. **Premium US**: GPT-4, Claude 3.5 Sonnet
-3. **Mid-tier**: Deepseek, Qwen-3.7
-4. **Cost-optimized**: Minimax-3, GLM-4
+- B. **Pass@k**：生成 k 个解取最优
+  - 更宽松，数值更高
+  - 需 k 倍算力
+  - 更能反映"真实能力上限"
 
-**Time Horizon**: Annual cost (industry standard for TCO decisions)
+**选择**：A（Pass@1）
 
-**Reasoning**:
-- Full spectrum: from $0.0001/request (self-hosted) to $0.03 (GPT-4)
-- Regional coverage: US, China, globally available options
-- Fair comparison: apples-to-apples on code generation quality + cost
-- Future-proof: easy to swap API keys as they become available
-
----
-
-## Implementation Roadmap
-
-(To be updated as each module completes)
-
-- [x] **M1: Data Preparation** — 164-problem HumanEval split into disjoint 50/50 train/eval sets (see `CLAUDE.md` for details, `data/scripts/prepare_data.py`)
-- [ ] M2: Baseline Testing
-- [ ] M3: LoRA Fine-tuning
-- [ ] M4: Fine-tuned Evaluation
+**依据**：
+- **公平对比**：与官方 HumanEval 协议一致
+- **口径清晰**：直接的同口径改进对比
+- **工程更简单**：无需额外采样逻辑
+- **避免自由度**：无需解释"为何 k=10 而非 k=5"
 
 ---
 
-## Blog Structure
+### **决策 7：M5 采用哪种量化方法？**
 
-1. **Part 1**: Why Code Generation? Why Llama 2-7B? Design decisions breakdown
-2. **Part 2**: MVP Results — Fine-tuning effect size and metrics
-3. **Part 3**: Production Optimization — Quantization and inference speedup
-4. **Part 4**: Cost Analysis — Fine-tune vs API calls trade-off and recommendations
+**问题**：如何从微调过渡到生产化优化？
+
+**备选方案**：
+- A. 仅 4-bit 量化（单一压缩点）
+- B. 渐进量化（先 8-bit 再 4-bit，给出质量 / 体积曲线）
+- C. 多方法对比（GPTQ vs AWQ vs bitsandbytes）
+
+**选择**：A（GPTQ，仅 4-bit）
+- 阶段二可扩展：如质量 / 体积权衡曲线值得细化，再补 8-bit、AWQ、以及用于推理的 bitsandbytes 变体
+
+**依据**：
+- GPTQ 最成熟、生产应用最广；且（不同于 M3 QLoRA 已用作**训练期**技巧的 bitsandbytes）它产出可独立部署的 checkpoint，其推理 kernel 被 vLLM（M6）原生良好支持
+- 仅量化 **M3 微调后模型**（基座 + LoRA adapter 经 `merge_and_unload()` 合并），不量化基座——M5 关注的是部署 M4 的产物，而非重走 M2 基线
+- 放弃原计划的 8-bit 变体：它使 Colab 运行翻倍（再量化 + 生成 + 评分一遍），风险面翻倍（多一次撞上 `gptqmodel` 版本 / 显存问题的机会），而换来的数据点主要是给质量 / 体积曲线增加分辨率，并不改变结论。单点（fp16 合并 vs GPTQ-4bit）已足以说明 MVP 结论："压缩到某体积，损失若干 pp 的 pass@1"。若该细化曲线确有价值，阶段二再补 8-bit
+- 对 M5 而言范围务实
 
 ---
 
-## References
+### **决策 8：M6 采用哪种推理框架？**
+
+**问题**：如何部署并加速量化后的模型？
+
+**备选方案**：
+- A. vLLM（业界标准，PagedAttention，生态成熟）
+- B. TensorRT-LLM（最快，NVIDIA 官方，学习曲线陡）
+- C. Ollama（最简单、轻量，性能较弱）
+
+**选择**：A（vLLM）
+
+**依据**：
+- 大规模部署中的标准选择
+- 由 MVP 推理自然过渡
+- 对量化模型支持良好
+- 与本项目的生产化目标最契合
+
+---
+
+### **决策 9：M7 成本分析的范围？**
+
+**问题**：该方案的经济价值如何？
+
+**备选方案**：
+- A. **本地推理 vs API 调用**（单请求成本 + 年度 TCO）
+- B. 不同微调策略的成本（7B vs 3B vs 不微调）
+- C. 全生命周期 TCO（开发 + 运维 + 硬件）
+
+**选择**：A（本地 vs API 成本建模）
+
+**依据**：
+- 最直接的业务论证
+- 最易理解与扩展
+- 直接回答："何时自托管比 API 更省？"
+- 可扩展的论证：单请求成本 × QPS × 天数 = 年度成本
+
+---
+
+### **决策 10：成本对比选哪些 API 模型？**
+
+**问题**：与哪些 LLM API 做对比？
+
+**备选方案**：（按价位、区域与可用性覆盖考虑）
+
+**选择**：一张覆盖多价位的对比表（**候选方向；M7 尚未执行，最终列表与定价待定**）：
+1. **自托管基线**：Llama 2-7B + vLLM（量化）
+2. **高端**：GPT-4、Claude 3.5 Sonnet 一类
+3. **中端**：DeepSeek、Qwen 一类
+4. **成本优化**：GLM、MiniMax 一类
+
+**时间跨度**：年度成本（TCO 决策的行业惯例）
+
+**依据**：
+- 覆盖完整价位区间：从自托管到高端 API
+- 覆盖不同区域的可用选项
+- 在代码生成质量 + 成本上做同口径比较
+- 便于随 API 可用性调整具体型号
+
+> 注：上表仅为候选方向，具体型号与单价在 M7 执行时再确定。
+
+---
+
+## 实现进度
+
+- [x] **M1：数据准备** —— HumanEval 164 题切分为**不相交**的 50 题训练集 / 114 题评估集（详见 `CLAUDE.md`、`data/scripts/prepare_data.py`）
+- [x] **M2：基线测试** —— 4-bit Llama 2-7B（无 adapter）在 114 题评估集上的 pass@1（数值见 `CLAUDE.md` / `docs/`）
+- [x] **M3：LoRA 微调** —— QLoRA 在 50 题训练集上微调，adapter 提交于 `models/lora_adapter/`
+- [x] **M4：微调后评估** —— 微调模型在评估集上的 pass@1；与 M2 的差异及显著性讨论见 `docs/`
+- [ ] **M5：模型量化** —— 代码就绪（`train/quantize_gptq.py`），待在 Colab 运行
+- [ ] **M6：推理优化 / vLLM** —— 代码就绪（`eval/generate_vllm.py`），待运行
+- [ ] **M7：成本分析** —— 未开始
+
+---
+
+## 博客结构
+
+1. **第一部分**：为什么选代码生成？为什么选 Llama 2-7B？——设计决策拆解
+2. **第二部分**：MVP 结果 —— 微调的效果量级与指标
+3. **第三部分**：生产化优化 —— 量化与推理加速
+4. **第四部分**：成本分析 —— 微调 vs API 调用的权衡与建议
+
+---
+
+## 参考文献
 
 - [HumanEval](https://github.com/openai/human-eval)
-- [Llama 2 Paper](https://arxiv.org/abs/2307.09288)
+- [Llama 2 论文](https://arxiv.org/abs/2307.09288)
 - [QLoRA: Efficient Finetuning of Quantized LLMs](https://arxiv.org/abs/2305.14314)
 - [vLLM: Easy, Fast, and Cheap LLM Serving with PagedAttention](https://arxiv.org/abs/2309.06180)
